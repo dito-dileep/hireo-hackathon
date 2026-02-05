@@ -81,7 +81,7 @@ export async function POST(req: Request) {
         // Fallback to pdfjs-dist extraction if pdf-parse produced little/no text.
         if (!text_excerpt || text_excerpt.trim().length < 30) {
           try {
-            const pdfjs = await import("pdfjs-dist/legacy/build/pdf.js");
+            const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
             const buf = Buffer.from(base64, "base64");
             const task = (pdfjs as any).getDocument({ data: buf });
             const doc = await task.promise;
