@@ -356,7 +356,11 @@ export default function RecruiterPage() {
                   <div className="font-medium">{j.title}</div>
                   <div className="muted small">{j.company}</div>
                 </div>
-                <div className="muted small">{new Date(j.created_at).toLocaleString()}</div>
+                <div className="muted small">
+                  {j.created_at
+                    ? new Date(j.created_at).toLocaleString()
+                    : "—"}
+                </div>
               </div>
               <div className="muted small" style={{ marginTop: 8 }}>{j.description}</div>
               {typeof j.vacancyRemaining === "number" && (
