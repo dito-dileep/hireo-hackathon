@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       addProctorLog({
         sessionId,
         type: "capture",
-        image_base64: imgBase64,
+        image_base64: imgBase64 || undefined,
         payload: face_count !== null ? { face_count } : undefined,
       });
       return NextResponse.json({ ok: true });
