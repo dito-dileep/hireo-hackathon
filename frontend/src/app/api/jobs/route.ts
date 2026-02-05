@@ -9,6 +9,11 @@ import {
 } from "../../../lib/db";
 import { gradeExtraQuestions } from "../../../lib/ai_grade";
 import { gradeAllQuestions, type Question } from "../../../lib/ai_assess";
+
+const BACKEND_URL =
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:8000";
 import crypto from "crypto";
 
 const SECRET = process.env.AUTH_SECRET || "dev-secret-please-change";
@@ -143,7 +148,7 @@ export async function PUT(req: Request) {
     let explanation = "";
 
     try {
-      const res = await fetch("http://localhost:8000/score", {
+      const res = await fetch(`${BACKEND_URL}/score`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ answers, tabSwitches }),
@@ -274,7 +279,7 @@ export async function PUT(req: Request) {
         reasoningScore = aiAll.reasoningScore;
       // Use backend explain endpoint for consistent language
       try {
-        const expRes = await fetch("http://localhost:8000/ai/explain", {
+        const expRes = await fetch(`${BACKEND_URL}/ai/explain`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({

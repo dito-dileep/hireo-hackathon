@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getProctorLogsForSession, getSubmissionsForSession } from "../../../../lib/db";
 
+const BACKEND_URL =
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:8000";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -56,7 +61,7 @@ export async function POST(req: Request) {
 
     // Prefer delegating the human-readable explanation to the FastAPI backend.
     try {
-      const backendRes = await fetch("http://localhost:8000/ai/explain", {
+      const backendRes = await fetch(`${BACKEND_URL}/ai/explain`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
