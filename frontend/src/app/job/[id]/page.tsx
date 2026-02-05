@@ -565,7 +565,7 @@ export default function JobTest() {
               <div className="font-medium">{q.q}</div>
               {q.type === "mcq" && (
                 <div className="choice-row">
-                  {q.options.map((opt, ix) => (
+                  {(q.options || []).map((opt, ix) => (
                     <button
                       key={ix}
                       className={`choice-btn ${
