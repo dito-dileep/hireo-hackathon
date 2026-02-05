@@ -539,7 +539,7 @@ export default function ReportsPage() {
                     <div className="small mt-2">
                       <strong>AI Grading (All Questions):</strong>
                       <div className="small" style={{ marginTop: 4 }}>
-                        {s.aiAll.perQuestion.map((p, i) => (
+                        {s.aiAll.perQuestion.map((p: any, i: number) => (
                           <div key={i} style={{ marginTop: 6 }}>
                             <div className="font-medium">
                               {p.id}: {p.correct ? "Correct" : "Needs work"}
