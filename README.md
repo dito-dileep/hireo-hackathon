@@ -8,6 +8,12 @@ HIREO is a hackathon-ready hiring platform that combines proctored assessments, 
 - Adithya R Nath — RA2411026010003
 - Shashwat — RA2511026010402
 
+## Member Contributions
+
+- **Dito Dileep** — Lead developer; full‑stack integration, AI grading/resume matching, proctoring logic, recruiter/candidate flows, deployment setup.
+- **Adithya R Nath** — UI/UX support, testing flows, feature validation, hackathon documentation support.
+- **Shashwat** — Research, feature brainstorming, testing feedback, presentation support.
+
 ## Problem We Solve
 
 Recruiters often struggle to validate candidate performance in remote assessments. HIREO addresses this with:
