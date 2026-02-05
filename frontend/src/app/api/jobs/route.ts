@@ -182,14 +182,14 @@ export async function PUT(req: Request) {
             prompt: "Quick logic check: What is 2 + 2?",
             expected: "4",
             candidate: String(answers["1"] ?? ""),
-            category: "reasoning",
+            category: "reasoning" as const,
           },
           {
             id: "2",
             prompt: "General awareness: Capital of France?",
             expected: "Paris",
             candidate: String(answers["2"] ?? ""),
-            category: "reasoning",
+            category: "reasoning" as const,
           },
           {
             id: "3",
@@ -197,14 +197,14 @@ export async function PUT(req: Request) {
               "Aptitude: If a train goes 60km in 1 hour 20 minutes, what's its average speed (km/h)?",
             expected: "45 km/h",
             candidate: String(answers["3"] ?? ""),
-            category: "reasoning",
+            category: "reasoning" as const,
           },
           {
             id: "4",
             prompt: "Coding: Write a function that returns the sum of an array.",
             expected: "Use a loop or reduce to sum array items and return total.",
             candidate: String(answers["4"] ?? ""),
-            category: "technical",
+            category: "technical" as const,
           },
           {
             id: "5",
@@ -213,7 +213,7 @@ export async function PUT(req: Request) {
             expected:
               "Check logs/metrics, isolate error, reproduce, rollback or use feature flags, monitor.",
             candidate: String(answers["5"] ?? ""),
-            category: "reasoning",
+            category: "reasoning" as const,
           },
           {
             id: "6",
@@ -221,7 +221,7 @@ export async function PUT(req: Request) {
               "Workstyle slider: On a scale of 1–10, how comfortable are you working independently?",
             expected: "A number between 1 and 10.",
             candidate: String(answers["6"] ?? ""),
-            category: "reasoning",
+            category: "reasoning" as const,
           },
         ];
         if (Array.isArray(job?.extraQuestions)) {
@@ -234,7 +234,7 @@ export async function PUT(req: Request) {
                   job.extraExpectedAnswers[i]) ||
                 "Reasonable correct answer.",
               candidate: String(answers[`extra-${i}`] ?? ""),
-              category: "extra",
+              category: "extra" as const,
             });
           });
         }
