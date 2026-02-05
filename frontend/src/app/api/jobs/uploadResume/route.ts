@@ -119,7 +119,13 @@ export async function POST(req: Request) {
     }
 
     // persist resume to local JSON DB
-    addResume({ jobId: jobId || undefined, sessionId, filename: (file as any).name || "resume", content_base64: base64, text_excerpt });
+    addResume({
+      jobId: jobId || undefined,
+      sessionId,
+      filename: (file as any).name || "resume",
+      content_base64: base64,
+      text_excerpt: text_excerpt || undefined,
+    });
 
     if (jobId) {
       const jobs = getJobs();
