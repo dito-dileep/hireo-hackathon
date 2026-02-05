@@ -8,7 +8,7 @@ import {
   decrementVacancyOnPass,
 } from "../../../lib/db";
 import { gradeExtraQuestions } from "../../../lib/ai_grade";
-import { gradeAllQuestions } from "../../../lib/ai_assess";
+import { gradeAllQuestions, type Question } from "../../../lib/ai_assess";
 import crypto from "crypto";
 
 const SECRET = process.env.AUTH_SECRET || "dev-secret-please-change";
@@ -176,7 +176,7 @@ export async function PUT(req: Request) {
       if (body.jobId) {
         const jobs = getJobs();
         const job = jobs.find((j: any) => j.id === body.jobId);
-        const aiQuestions = [
+        const aiQuestions: Question[] = [
           {
             id: "1",
             prompt: "Quick logic check: What is 2 + 2?",

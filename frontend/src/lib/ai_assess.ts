@@ -1,4 +1,4 @@
-type Question = {
+export type Question = {
   id: string;
   prompt: string;
   expected: string;
