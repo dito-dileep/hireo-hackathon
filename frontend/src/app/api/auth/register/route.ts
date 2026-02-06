@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { addUser, getUserByUsername } from "../../../../lib/db";
 import crypto from "crypto";
-import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
