@@ -81,16 +81,18 @@ export async function POST(req: Request) {
           { ok: false, error: "invalid" },
           { status: 401 },
         );
-    const [salt, hash] = (user.passwordHash || "").split("$");
-    const candidate = crypto
-      .createHash("sha256")
-      .update(salt + password)
-      .digest("hex");
-    if (!demoAuth && candidate !== hash)
-      return NextResponse.json(
-        { ok: false, error: "invalid" },
-        { status: 401 },
-      );
+    if (user) {
+      const [salt, hash] = (user.passwordHash || "").split("$");
+      const candidate = crypto
+        .createHash("sha256")
+        .update(salt + password)
+        .digest("hex");
+      if (!demoAuth && candidate !== hash)
+        return NextResponse.json(
+          { ok: false, error: "invalid" },
+          { status: 401 },
+        );
+    }
 
     const payload = {
       sub: user?.id || `user-${Date.now()}`,
