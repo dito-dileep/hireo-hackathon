@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type Job = {
   id: string;
@@ -16,6 +17,7 @@ type Job = {
 export default function CandidatePage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const router = useRouter();
 
   async function fetchJobs() {
     try {
@@ -42,9 +44,15 @@ export default function CandidatePage() {
         if (j.ok && j.user && j.user.role === "candidate") {
           setAuthorized(true);
           fetchJobs();
-        } else setAuthorized(false);
+        } else {
+          setAuthorized(false);
+          router.replace("/");
+        }
       })
-      .catch(() => setAuthorized(false));
+      .catch(() => {
+        setAuthorized(false);
+        router.replace("/");
+      });
   }, []);
 
   if (authorized === false)

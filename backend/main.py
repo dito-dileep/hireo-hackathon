@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import json
+from pathlib import Path
+from typing import Optional, List
 from pydantic import BaseModel
 
 
@@ -16,6 +19,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---- Simple profile storage (JSON file for demo) ----
+DATA_DIR = Path(__file__).resolve().parent
+PROFILES_FILE = DATA_DIR / "profiles.json"
+
+
+def read_profiles():
+    if not PROFILES_FILE.exists():
+        PROFILES_FILE.write_text("{}", encoding="utf8")
+        return {}
+    try:
+        return json.loads(PROFILES_FILE.read_text(encoding="utf8"))
+    except Exception:
+        return {}
+
+
+def write_profiles(data):
+    PROFILES_FILE.write_text(json.dumps(data, indent=2), encoding="utf8")
 
 
 @app.get("/health")
@@ -245,6 +266,64 @@ async def score_candidate(req: ScoreRequest):
         "tabSwitches": tab_switches,
         "explanation": base_explanation,
     }
+
+
+class ProfilePayload(BaseModel):
+    username: str
+    fullName: Optional[str] = None
+    skills: Optional[List[str]] = None
+    experience: Optional[int] = None
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    updatedAt: Optional[int] = None
+    resumeFilename: Optional[str] = None
+    resumeBase64: Optional[str] = None
+    resumeText: Optional[str] = None
+
+
+@app.get("/profiles/{username}")
+async def get_profile(username: str):
+    data = read_profiles()
+    profile = data.get(username)
+    return {"ok": True, "profile": profile}
+
+
+@app.put("/profiles/{username}")
+async def put_profile(username: str, payload: ProfilePayload):
+    data = read_profiles()
+    profile = data.get(username, {})
+    profile.update(
+        {
+            "username": username,
+            "fullName": payload.fullName,
+            "skills": payload.skills or [],
+            "experience": payload.experience,
+            "bio": payload.bio,
+            "location": payload.location,
+            "updatedAt": payload.updatedAt or int(__import__("time").time() * 1000),
+        }
+    )
+    data[username] = profile
+    write_profiles(data)
+    return {"ok": True, "profile": profile}
+
+
+@app.post("/profiles/{username}/resume")
+async def put_resume(username: str, payload: ProfilePayload):
+    data = read_profiles()
+    profile = data.get(username, {})
+    profile.update(
+        {
+            "username": username,
+            "resumeFilename": payload.resumeFilename,
+            "resumeBase64": payload.resumeBase64,
+            "resumeText": payload.resumeText,
+            "updatedAt": payload.updatedAt or int(__import__("time").time() * 1000),
+        }
+    )
+    data[username] = profile
+    write_profiles(data)
+    return {"ok": True, "profile": profile}
 
 
 if __name__ == "__main__":

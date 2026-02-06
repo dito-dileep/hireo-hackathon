@@ -35,11 +35,20 @@ export default function Navbar() {
       </div>
       <nav className="nav-links">
         <Link href="/">Home</Link>
-        <Link href="/candidate">Jobs</Link>
-        <Link href="/reports">Reports</Link>
-        {user?.role === "recruiter" ? (
-          <Link href="/recruiter">Post Job</Link>
-        ) : null}
+        {user?.role === "candidate" && (
+          <>
+            <Link href="/candidate">Jobs</Link>
+            <Link href="/reports">Reports</Link>
+            <Link href="/profile">Profile</Link>
+          </>
+        )}
+        {user?.role === "recruiter" && (
+          <>
+            <Link href="/recruiter">Post Job</Link>
+            <Link href="/recruiter/shortlist">Shortlist</Link>
+            <Link href="/reports">Reports</Link>
+          </>
+        )}
         {user ? (
           <>
             <span className="muted">{user.username}</span>

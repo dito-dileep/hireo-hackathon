@@ -192,6 +192,9 @@ export async function POST(req: Request) {
           requiredSkills.length === 0 ||
           finalSkillsMatched >= Math.max(1, Math.round(requiredSkills.length * 0.6));
 
+        const fallbackText =
+          text_excerpt ||
+          `skills: ${(finalMatched || []).join(", ")} required: ${requiredSkills.join(", ")}`;
         return NextResponse.json({
           ok: true,
           sessionId,
@@ -204,11 +207,22 @@ export async function POST(req: Request) {
           expOk,
           emails,
           phone,
+          resumeText: fallbackText,
         });
       }
     }
 
-    return NextResponse.json({ ok: true, sessionId, filename: (file as any).name || "resume", skillsMatched: 0, requiredSkills: [], detectedExp: 0, skillsOk: true, expOk: true });
+    return NextResponse.json({
+      ok: true,
+      sessionId,
+      filename: (file as any).name || "resume",
+      skillsMatched: 0,
+      requiredSkills: [],
+      detectedExp: 0,
+      skillsOk: true,
+      expOk: true,
+      resumeText: text_excerpt || "",
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json({
@@ -220,6 +234,7 @@ export async function POST(req: Request) {
       detectedExp: 0,
       skillsOk: true,
       expOk: true,
+      resumeText: "",
     });
   }
 }

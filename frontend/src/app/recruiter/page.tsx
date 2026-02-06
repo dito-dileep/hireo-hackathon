@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 type Job = {
   id: string;
@@ -17,6 +18,7 @@ type Job = {
 };
 
 export default function RecruiterPage() {
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [skills, setSkills] = useState("");
@@ -71,10 +73,17 @@ export default function RecruiterPage() {
     fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((j) => {
-        if (j.ok && j.user && j.user.role === "recruiter") setAuthorized(true);
-        else setAuthorized(false);
+        if (j.ok && j.user && j.user.role === "recruiter") {
+          setAuthorized(true);
+        } else {
+          setAuthorized(false);
+          router.replace("/");
+        }
       })
-      .catch(() => setAuthorized(false));
+      .catch(() => {
+        setAuthorized(false);
+        router.replace("/");
+      });
   }, []);
 
   async function postJob(e: React.FormEvent) {

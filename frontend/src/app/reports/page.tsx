@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useEffect, useState } from "react";
 
 export default function ReportsPage() {
@@ -8,6 +8,8 @@ export default function ReportsPage() {
   const [report, setReport] = useState<any>(null);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const [role, setRole] = useState<"recruiter" | "candidate" | null>(null);
+  const [candidateSubs, setCandidateSubs] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | "all">("all");
   const [overview, setOverview] = useState<any[]>([]);
@@ -27,10 +29,16 @@ export default function ReportsPage() {
     fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((j) => {
-        if (j.ok && j.user && j.user.role === "recruiter") {
+        if (j.ok && j.user && (j.user.role === "recruiter" || j.user.role === "candidate")) {
           setAuthorized(true);
-          fetchSessions();
-          fetchJobs();
+          setRole(j.user.role);
+          if (j.user.role === "recruiter") {
+            fetchSessions();
+            fetchJobs();
+          } else {
+            fetchJobs();
+            fetchCandidateSubs(j.user.username);
+          }
         } else setAuthorized(false);
       })
       .catch(() => setAuthorized(false));
@@ -83,6 +91,19 @@ export default function ReportsPage() {
     fetchOverview(selectedJobId);
      
   }, [selectedJobId]);
+
+  async function fetchCandidateSubs(username: string) {
+    try {
+      const res = await fetch(
+        `/api/reports/candidate?username=${encodeURIComponent(username)}`,
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      setCandidateSubs(data.submissions || []);
+    } catch {
+      // ignore
+    }
+  }
 
   const filteredSessions = sessions
     .filter((s) => {
@@ -224,9 +245,60 @@ export default function ReportsPage() {
   if (authorized === false)
     return (
       <div className="card">
-        Access denied. Please <a href="/auth/login">login</a> as a recruiter.
+        Access denied. Please <a href="/auth/login">login</a>.
       </div>
     );
+
+  if (authorized && role === "candidate") {
+    return (
+      <div className="card">
+        <div className="font-medium mb-2">My Test Reports</div>
+        <div className="small muted mb-3">
+          Your attempts, scores, and outcomes. Only your data is shown here.
+        </div>
+        {candidateSubs.length === 0 ? (
+          <div className="muted small">No attempts yet.</div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {candidateSubs
+              .slice()
+              .sort((a: any, b: any) => (b.created_at || 0) - (a.created_at || 0))
+              .map((s: any, ix: number) => {
+                const jobTitle =
+                  jobs.find((j) => j.id === s.jobId)?.title || s.jobId || "Job";
+                const status = s.passed ? "Passed" : "Failed";
+                const integrity =
+                  typeof s.tabSwitches === "number" && s.tabSwitches > 1
+                    ? "Flagged"
+                    : "Clean";
+                return (
+                  <div key={ix} className="card">
+                    <div className="font-medium">{jobTitle}</div>
+                    <div className="small muted">
+                      {s.created_at
+                        ? new Date(s.created_at).toLocaleString()
+                        : "Unknown time"}
+                    </div>
+                    <div className="small mt-1">
+                      Score: <strong>{s.score ?? ""}</strong> {" "}
+                      <strong>{status}</strong>
+                    </div>
+                    <div className="small">
+                      Integrity: <strong>{integrity}</strong>
+                    </div>
+                    {s.explanation && (
+                      <div className="small mt-1">
+                        <strong>Reason:</strong> {s.explanation}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="grid-2">
@@ -259,7 +331,7 @@ export default function ReportsPage() {
           <label className="small muted">Search</label>
           <input
             className="form-input mt-1"
-            placeholder="Candidate, job, or session…"
+            placeholder="Candidate, job, or session"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -301,8 +373,8 @@ export default function ReportsPage() {
                 <div key={o.jobId} style={{ marginTop: 6 }}>
                   <div className="font-medium small">{o.jobTitle}</div>
                   <div className="muted small">
-                    Candidates: <strong>{o.total}</strong> • Passed:{" "}
-                    <strong>{o.passed}</strong> • Flagged:{" "}
+                    Candidates: <strong>{o.total}</strong>  Passed:{" "}
+                    <strong>{o.passed}</strong>  Flagged:{" "}
                     <strong>{o.flagged}</strong>
                   </div>
                 </div>
@@ -321,12 +393,22 @@ export default function ReportsPage() {
                 {s.candidateUsername || "Unknown candidate"}
                 {s.flagged && (
                   <span style={{ marginLeft: 8, color: "#ef4444" }}>
-                    • Flagged
+                     Flagged
                   </span>
                 )}
               </div>
+              {s.candidateUsername && (
+                <div className="small">
+                  <a
+                    href={`/profile/${encodeURIComponent(s.candidateUsername)}`}
+                    className="underline"
+                  >
+                    View profile
+                  </a>
+                </div>
+              )}
               <div className="small muted">
-                {s.jobTitle || "Unknown job"} •{" "}
+                {s.jobTitle || "Unknown job"} {" "}
                 {s.created_at
                   ? new Date(s.created_at).toLocaleString()
                   : "Unknown time"}
@@ -342,15 +424,26 @@ export default function ReportsPage() {
       <div>
         <div className="card mb-4">
           <div className="font-medium">
-            Session: {selected || "—"}
+            Session: {selected || ""}
           </div>
           {submissions[0] && (
             <div className="small mt-1 muted">
               Candidate:{" "}
               <strong>{submissions[0].candidateUsername || "Unknown"}</strong>{" "}
+              {submissions[0].candidateUsername && (
+                <>
+                  {" "}
+                  <a
+                    href={`/profile/${encodeURIComponent(submissions[0].candidateUsername)}`}
+                    className="underline"
+                  >
+                    View profile
+                  </a>
+                </>
+              )}
               {submissions[0].jobId && (
                 <>
-                  • Job:{" "}
+                   Job:{" "}
                   <strong>
                     {jobs.find((j) => j.id === submissions[0].jobId)?.title ||
                       submissions[0].jobId}
@@ -361,7 +454,7 @@ export default function ReportsPage() {
           )}
           {report && (
             <div className="mt-2 muted">
-              AI Integrity Score: <strong>{report.score}</strong> / 100 —{" "}
+              AI Integrity Score: <strong>{report.score}</strong> / 100 {" "}
               Suspicious: <strong>{report.suspicious ? "Yes" : "No"}</strong>
               {report.explanation && (
                 <div className="mt-2 small">
@@ -430,7 +523,7 @@ export default function ReportsPage() {
                     {s.candidateUsername || "Unknown candidate"}
                   </div>
                   <div className="small mt-1">
-                    Score: <strong>{s.score ?? "—"}</strong> —{" "}
+                    Score: <strong>{s.score ?? ""}</strong> {" "}
                     <strong>{s.passed ? "Passed" : "Failed"}</strong>
                   </div>
                   {typeof s.technicalScore === "number" && (
@@ -471,7 +564,7 @@ export default function ReportsPage() {
                       <strong>AI Match Score:</strong>{" "}
                       <span>{s.extraAi.overallScore}</span>{" "}
                       {s.extraAi.summary && (
-                        <span className="muted">— {s.extraAi.summary}</span>
+                        <span className="muted"> {s.extraAi.summary}</span>
                       )}
                     </div>
                   )}
@@ -515,7 +608,7 @@ export default function ReportsPage() {
                                     Q{i + 1}: {extraQs.length ? q : "Extra question"}
                                   </div>
                                   <div className="muted">
-                                    Answer: {ans || "—"}
+                                    Answer: {ans || ""}
                                   </div>
                                   {expected && (
                                     <div className="muted">
@@ -524,7 +617,7 @@ export default function ReportsPage() {
                                   )}
                                   {aiPer && (
                                     <div className="muted">
-                                      AI score: {aiPer.score} — {aiPer.rationale}
+                                      AI score: {aiPer.score}  {aiPer.rationale}
                                     </div>
                                   )}
                                 </div>
@@ -545,7 +638,7 @@ export default function ReportsPage() {
                               {p.id}: {p.correct ? "Correct" : "Needs work"}
                             </div>
                             <div className="muted">
-                              Score: {p.score} — {p.rationale}
+                              Score: {p.score}  {p.rationale}
                             </div>
                           </div>
                         ))}
