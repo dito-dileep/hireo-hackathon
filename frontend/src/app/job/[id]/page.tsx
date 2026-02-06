@@ -734,7 +734,11 @@ export default function JobTest() {
               style={{ marginTop: 10 }}
             />
             <div className="mt-2 flex gap-2">
-              <button className="btn" onClick={uploadResumeAndCheck} type="button">
+              <button
+                className="btn"
+                onClick={() => uploadResumeAndCheck()}
+                type="button"
+              >
                 {uploading ? "Checking..." : "Upload & Check"}
               </button>
             </div>
