@@ -45,11 +45,16 @@ export async function GET(req: Request) {
         { status: 401 },
       );
     const user = getUserById(payload.sub);
-    if (!user)
-      return NextResponse.json(
-        { ok: false, error: "not found" },
-        { status: 404 },
-      );
+    if (!user) {
+      return NextResponse.json({
+        ok: true,
+        user: {
+          id: payload.sub,
+          username: payload.username || "user",
+          role: payload.role || "candidate",
+        },
+      });
+    }
     return NextResponse.json({
       ok: true,
       user: { id: user.id, username: user.username, role: user.role },
