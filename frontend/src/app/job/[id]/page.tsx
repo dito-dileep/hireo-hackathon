@@ -3,6 +3,30 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useParams } from "next/navigation";
 import Proctor from "../../components/Proctor";
 
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
+function normalizeText(s?: string) {
+  return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ");
+}
+
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function skillMatches(text: string, skill: string) {
+  const t = text.toLowerCase();
+  const s = skill.toLowerCase().trim();
+  if (!s) return false;
+  if (t.includes(s)) return true;
+  try {
+    const re = new RegExp(`\\b${escapeRegExp(s)}\\b`, "i");
+    return re.test(text);
+  } catch {
+    return false;
+  }
+}
+
 function questions() {
   return [
     {
@@ -52,6 +76,15 @@ export default function JobTest() {
   const [codeText, setCodeText] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeCheck, setResumeCheck] = useState<any>(null);
+  const [resumeCheckSource, setResumeCheckSource] = useState<
+    "profile" | "upload" | null
+  >(null);
+  const [resumeText, setResumeText] = useState<string>("");
+  const [aiQuestions, setAiQuestions] = useState<any[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const aiSeedRef = useRef<string>("");
+  const [aiAttempts, setAiAttempts] = useState(0);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [result, setResult] = useState<{
     score: number;
@@ -77,6 +110,7 @@ export default function JobTest() {
   const [agree, setAgree] = useState(false);
   const [agreeError, setAgreeError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [profile, setProfile] = useState<any>(null);
 
   const [sessionId] = useState(() => `sess-${jobId}-${Date.now()}`);
 
@@ -99,9 +133,123 @@ export default function JobTest() {
         setAuthorized(true);
         const r = await fetch('/api/jobs');
         if (r.ok){ const j = await r.json(); const found = (j.jobs||[]).find((x:any)=> x.id === jobId); if (found) setJob(found); }
+        if (token) {
+          try {
+            const me = await fetch("/api/auth/me", {
+              headers: { Authorization: `Bearer ${token}` },
+            }).then((r) => r.json());
+            if (me?.ok && me?.user?.username) {
+              const pr = await fetch(
+                `${BACKEND_URL}/profiles/${encodeURIComponent(
+                  me.user.username,
+                )}`,
+              );
+              const pj = await pr.json();
+              if (pj?.profile) {
+                setProfile(pj.profile);
+                if (pj.profile.resumeText) {
+                  setResumeText(String(pj.profile.resumeText));
+                } else if (pj.profile.skills || pj.profile.bio) {
+                  const sk = Array.isArray(pj.profile.skills)
+                    ? pj.profile.skills.join(", ")
+                    : "";
+                  const bio = pj.profile.bio || "";
+                  const exp =
+                    typeof pj.profile.experience === "number"
+                      ? `Experience: ${pj.profile.experience} years.`
+                      : "";
+                  setResumeText(`Skills: ${sk}. ${exp} ${bio}`.trim());
+                }
+              }
+            }
+          } catch {}
+        }
       }catch(e){}
     })();
   }, [jobId]);
+
+  useEffect(() => {
+    if (!job || !profile) return;
+    if (resumeCheckSource === "upload") return;
+    const requiredSkills: string[] = (job.skills || [])
+      .map((s: string) => String(s).toLowerCase().trim())
+      .filter(Boolean);
+    const profileSkills: string[] = (profile.skills || [])
+      .map((s: string) => String(s).toLowerCase().trim())
+      .filter(Boolean);
+    const resumeText = String(profile.resumeText || "");
+    const rawText = `${profileSkills.join(" ")} ${resumeText}`;
+    const norm = normalizeText(rawText);
+    const matched: string[] = [];
+    for (const sk of requiredSkills) {
+      const skNorm = normalizeText(sk);
+      if (profileSkills.includes(sk) || norm.includes(skNorm) || skillMatches(rawText, sk)) {
+        matched.push(sk);
+      }
+    }
+    const detectedExp = Number(profile.experience || 0) || 0;
+    const skillsMatched = matched.length;
+    const skillsOk =
+      requiredSkills.length === 0 ||
+      skillsMatched >= Math.max(1, Math.round(requiredSkills.length * 0.6));
+    const expOk = detectedExp >= (Number(job.minExp) || 0);
+    setResumeCheck({
+      ok: true,
+      source: "profile",
+      skillsMatched,
+      matchedSkills: matched,
+      requiredSkills,
+      detectedExp,
+      skillsOk,
+      expOk,
+    });
+    setResumeCheckSource("profile");
+  }, [job, profile, resumeCheckSource]);
+
+  useEffect(() => {
+    if (!job) return;
+    if (!resumeText) return;
+    if (aiQuestions.length > 0 || aiLoading) return;
+    (async () => {
+      try {
+        setAiLoading(true);
+        setAiError(null);
+        const seed = `${resumeText.length}:${resumeText.slice(0, 24)}:${resumeText.slice(-24)}`;
+        if (aiSeedRef.current === seed) {
+          setAiLoading(false);
+          return;
+        }
+        aiSeedRef.current = seed;
+        const res = await fetch("/api/ai/questions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            resumeText,
+            requiredSkills: job.skills || [],
+            roleTitle: job.title || "",
+            count: 3,
+          }),
+        });
+        const j = await res.json();
+        if (j.ok && Array.isArray(j.questions)) {
+          setAiQuestions(j.questions);
+        } else {
+          setAiError(
+            j?.error ||
+              "AI question generation failed. Please try again.",
+          );
+        }
+      } catch {}
+      setAiLoading(false);
+    })();
+  }, [job, resumeText, aiQuestions.length, aiLoading, aiAttempts]);
+
+  async function regenerateAiQuestions() {
+    setAiQuestions([]);
+    setAiError(null);
+    aiSeedRef.current = "";
+    setAiAttempts((c) => c + 1);
+  }
 
   useEffect(() => {
     if (!job || started) return;
@@ -250,6 +398,10 @@ export default function JobTest() {
       : job?.extraQuestion
         ? [job.extraQuestion]
         : [];
+    if (aiQuestions.length === 0) {
+      alert("AI questions are not ready yet. Please upload a resume and wait.");
+      return;
+    }
     if (extraQs.length) {
       for (let i = 0; i < extraQs.length; i++) {
         const key = `extra-${i}`;
@@ -271,6 +423,7 @@ export default function JobTest() {
       jobId,
       sessionId,
       answers,
+      aiQuestions,
       tabSwitches,
       proctorFlags: { multiFaceDetected },
     };
@@ -295,14 +448,15 @@ export default function JobTest() {
     setSubmitting(false);
   }
 
-  async function uploadResumeAndCheck() {
-    if (!resumeFile) {
+  async function uploadResumeAndCheck(fileOverride?: File | null) {
+    const fileToUse = fileOverride || resumeFile;
+    if (!fileToUse) {
       // open file picker for smoother UX
       if (fileInputRef.current) fileInputRef.current.click();
       return;
     }
     const fd = new FormData();
-    fd.append("resume", resumeFile);
+    fd.append("resume", fileToUse);
     fd.append("jobId", jobId);
     fd.append("sessionId", sessionId);
     const token =
@@ -317,6 +471,17 @@ export default function JobTest() {
     });
     const j = await res.json();
     setResumeCheck(j);
+    setResumeCheckSource("upload");
+    if (j && j.resumeText) {
+      setResumeText(String(j.resumeText));
+    } else if (j && Array.isArray(j.matchedSkills)) {
+      setResumeText(`Skills: ${j.matchedSkills.join(", ")}`);
+    }
+    // Force AI regeneration even if the resume text is unchanged.
+    setAiQuestions([]);
+    setAiError(null);
+    aiSeedRef.current = "";
+    setAiAttempts((c) => c + 1);
     if (j.ok && (!j.skillsOk || !j.expOk)) {
       alert(
         "Resume does not meet minimum requirements. Check the detected skills/experience.",
@@ -339,10 +504,11 @@ export default function JobTest() {
               : job?.extraQuestion
                 ? [job.extraQuestion]
                 : [];
-            const total = qs.length + extraQs.length;
+            const total = aiQuestions.length + extraQs.length;
             const answered = Object.keys(answers).filter((k) => {
               const v = answers[k];
-              return v !== undefined && v !== "";
+              if (v === undefined || v === "") return false;
+              return String(k).startsWith("ai-") || String(k).startsWith("extra-");
             }).length;
             const mins = Math.floor(timeLeft / 60);
             const secs = timeLeft % 60;
@@ -504,31 +670,48 @@ export default function JobTest() {
           </div>
         </div>
       )}
-      <div className="grid gap-4">
+      <div className="test-layout">
+        <div className="test-sidebar">
           {started && (
-            <div>
-          <Proctor
-            sessionId={sessionId}
-            onMultiFace={(cnt) => {
-              if (cnt > 1) {
-                setMultiFaceDetected(true);
-                setIntegrityFail(
-                  "Multiple faces detected. This attempt will be marked as failed.",
-                );
-              }
-            }}
-            onPermissionPrompt={(active) => {
-              permissionPromptRef.current = active;
-              suppressSwitchUntilRef.current = Date.now() + 5000;
-            }}
-          />
-        </div>
+            <div className="card">
+              <Proctor
+                sessionId={sessionId}
+                onMultiFace={(cnt) => {
+                  if (cnt > 1) {
+                    setMultiFaceDetected(true);
+                    setIntegrityFail(
+                      "Multiple faces detected. This attempt will be marked as failed.",
+                    );
+                  }
+                }}
+                onPermissionPrompt={(active) => {
+                  permissionPromptRef.current = active;
+                  suppressSwitchUntilRef.current = Date.now() + 5000;
+                }}
+              />
+            </div>
           )}
-        <div className="card">
-          <div className="mb-4">
-            <label className="block font-medium">
-              Upload resume (PDF or TXT) to validate requirements
-            </label>
+          <div className="card mt-3">
+            <div className="font-medium">Test status</div>
+            <div className="small muted" style={{ marginTop: 6 }}>
+              Time left:{" "}
+              {Math.floor(timeLeft / 60).toString().padStart(2, "0")}:
+              {(timeLeft % 60).toString().padStart(2, "0")}
+            </div>
+            <div className="small muted" style={{ marginTop: 6 }}>
+              Tab switches: <strong>{tabSwitches}</strong>
+            </div>
+            {integrityFail && (
+              <div className="small" style={{ color: "#ef4444", marginTop: 8 }}>
+                {integrityFail}
+              </div>
+            )}
+          </div>
+          <div className="card mt-3">
+            <div className="font-medium">Resume check</div>
+            <div className="small muted" style={{ marginTop: 6 }}>
+              Upload resume to validate skills and experience.
+            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -541,55 +724,80 @@ export default function JobTest() {
                 }, 5000);
               }}
               onChange={(e) => {
-                setResumeFile(e.target.files?.[0] || null);
-                // Try to re-enter fullscreen after file selection
+                const f = e.target.files?.[0] || null;
+                setResumeFile(f);
+                if (f) uploadResumeAndCheck(f);
                 if (document.documentElement.requestFullscreen) {
                   document.documentElement.requestFullscreen().catch(() => {});
                 }
               }}
+              style={{ marginTop: 10 }}
             />
             <div className="mt-2 flex gap-2">
-              <button
-                className="btn"
-                onClick={uploadResumeAndCheck}
-                type="button"
-              >
+              <button className="btn" onClick={uploadResumeAndCheck} type="button">
                 {uploading ? "Checking..." : "Upload & Check"}
               </button>
-              {resumeCheck && (
-                <div className="muted">
-                  {resumeCheck.ok
-                    ? `Skills matched: ${resumeCheck.skillsMatched}, Exp: ${resumeCheck.detectedExp}`
-                    : "Check failed"}
-                </div>
-              )}
             </div>
+            {resumeCheck && (
+              <div className="muted small" style={{ marginTop: 8 }}>
+                {resumeCheck.ok
+                  ? `${resumeCheck.source === "profile" ? "Auto-checked from profile. " : ""}Skills matched: ${resumeCheck.skillsMatched}, Exp: ${resumeCheck.detectedExp}`
+                  : "Check failed"}
+              </div>
+            )}
           </div>
+        </div>
+        <div className="card test-card">
 
-          {qs.map((q) => (
-            <div key={q.id} className="mb-3">
-              <div className="font-medium">{q.q}</div>
-              {q.type === "mcq" && (
-                <div className="choice-row">
-                  {(q.options || []).map((opt, ix) => (
-                    <button
-                      key={ix}
-                      className={`choice-btn ${
-                        answers[String(q.id)] === ix ? "choice-btn--selected" : ""
-                      }`}
-                      onClick={() => pick(q.id, ix)}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              )}
+          {aiQuestions.length > 0 && (
+            <div className="question-card">
+              <div className="font-medium">AI-tailored questions</div>
+              <div className="small muted" style={{ marginTop: 6 }}>
+                Generated from your resume and the job requirements.
+              </div>
+            </div>
+          )}
+          {aiLoading && (
+            <div className="question-card">
+              <div className="font-medium">Generating AI questions…</div>
+              <div className="small muted" style={{ marginTop: 6 }}>
+                Please wait a moment after uploading your resume.
+              </div>
+            </div>
+          )}
+          {aiError && (
+            <div className="question-card">
+              <div className="font-medium">AI questions unavailable</div>
+              <div className="small muted" style={{ marginTop: 6 }}>
+                {aiError}
+              </div>
+              <button
+                className="btn btn-ghost mt-2"
+                onClick={regenerateAiQuestions}
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {aiQuestions.map((q, idx) => (
+            <div key={`ai-${q.id || idx}`} className="question-card">
+              <div className="font-medium">{q.prompt}</div>
               {q.type === "short" && (
                 <input
                   className="form-input mt-2"
-                  value={answers[String(q.id)] || ""}
+                  value={answers[`ai-${idx}`] || ""}
                   onChange={(e) =>
-                    setAnswers((a) => ({ ...a, [String(q.id)]: e.target.value }))
+                    setAnswers((a) => ({ ...a, [`ai-${idx}`]: e.target.value }))
+                  }
+                />
+              )}
+              {q.type === "text" && (
+                <textarea
+                  className="form-input mt-2"
+                  rows={4}
+                  value={answers[`ai-${idx}`] || ""}
+                  onChange={(e) =>
+                    setAnswers((a) => ({ ...a, [`ai-${idx}`]: e.target.value }))
                   }
                 />
               )}
@@ -597,27 +805,25 @@ export default function JobTest() {
                 <textarea
                   className="form-input mt-2"
                   rows={6}
-                  value={answers[String(q.id)] || codeText}
-                  onChange={(e) => {
-                    setCodeText(e.target.value);
-                    setAnswers((a) => ({ ...a, [String(q.id)]: e.target.value }));
-                  }}
-                />
-              )}
-              {q.type === "text" && (
-                <textarea
-                  className="form-input mt-2"
-                  rows={4}
-                  value={answers[String(q.id)] || ""}
+                  value={answers[`ai-${idx}`] || ""}
                   onChange={(e) =>
-                    setAnswers((a) => ({ ...a, [String(q.id)]: e.target.value }))
+                    setAnswers((a) => ({ ...a, [`ai-${idx}`]: e.target.value }))
                   }
                 />
               )}
             </div>
           ))}
+          {aiQuestions.length === 0 && !aiLoading && (
+            <div className="question-card">
+              <div className="font-medium">Upload your resume to start</div>
+              <div className="small muted" style={{ marginTop: 6 }}>
+                AI questions appear after your resume is processed. Recruiter
+                questions will still be shown below.
+              </div>
+            </div>
+          )}
           {(job?.extraQuestions || []).map((q: string, i: number) => (
-            <div key={`extra-${i}`} className="mb-3">
+            <div key={`extra-${i}`} className="question-card">
               <div className="font-medium">{q}</div>
               <textarea
                 className="form-input mt-2"
