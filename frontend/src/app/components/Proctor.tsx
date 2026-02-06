@@ -5,10 +5,12 @@ function ProctorInner({
   sessionId,
   onFaceCount,
   onMultiFace,
+  onPermissionPrompt,
 }: {
   sessionId: string;
   onFaceCount?: (count: number) => void;
   onMultiFace?: (count: number) => void;
+  onPermissionPrompt?: (active: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -20,6 +22,7 @@ function ProctorInner({
 
     async function startCamera() {
       try {
+        if (onPermissionPrompt) onPermissionPrompt(true);
         setStatus("requesting-permission");
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
@@ -31,12 +34,14 @@ function ProctorInner({
         }
         setStreamActive(true);
         setStatus("recording");
+        if (onPermissionPrompt) onPermissionPrompt(false);
 
         // capture snapshot every 10 seconds
         interval = window.setInterval(captureAndSend, 10000);
       } catch (err) {
         console.error(err);
         setStatus("permission-denied");
+        if (onPermissionPrompt) onPermissionPrompt(false);
       }
     }
 

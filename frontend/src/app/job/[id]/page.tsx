@@ -69,6 +69,7 @@ export default function JobTest() {
   const [multiFaceDetected, setMultiFaceDetected] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fileDialogOpenRef = useRef(false);
+  const permissionPromptRef = useRef(false);
   const [timeLeft, setTimeLeft] = useState(15 * 60); // default 15 minutes
   const [timeWarning, setTimeWarning] = useState<string | null>(null);
   const autoSubmittedRef = useRef(false);
@@ -120,6 +121,7 @@ export default function JobTest() {
     function registerSwitch() {
       const now = Date.now();
       if (now < suppressSwitchUntilRef.current) return;
+      if (permissionPromptRef.current) return;
       if (now - lastSwitchRef.current < 1000) return;
       lastSwitchRef.current = now;
       setTabSwitches((c) => {
@@ -157,7 +159,7 @@ export default function JobTest() {
       suppressSwitchUntilRef.current = Date.now() + 1000;
       if (!fs) {
         // If a file picker triggered exit, don't count as a switch
-        if (!fileDialogOpenRef.current) {
+        if (!fileDialogOpenRef.current && !permissionPromptRef.current) {
           setTabWarning(
             "Fullscreen exited. This will be marked as a tab/window switch.",
           );
@@ -505,18 +507,22 @@ export default function JobTest() {
       <div className="grid gap-4">
           {started && (
             <div>
-              <Proctor
-                sessionId={sessionId}
-                onMultiFace={(cnt) => {
-                  if (cnt > 1) {
-                    setMultiFaceDetected(true);
-                    setIntegrityFail(
-                      "Multiple faces detected. This attempt will be marked as failed.",
-                    );
-                  }
-                }}
-              />
-            </div>
+          <Proctor
+            sessionId={sessionId}
+            onMultiFace={(cnt) => {
+              if (cnt > 1) {
+                setMultiFaceDetected(true);
+                setIntegrityFail(
+                  "Multiple faces detected. This attempt will be marked as failed.",
+                );
+              }
+            }}
+            onPermissionPrompt={(active) => {
+              permissionPromptRef.current = active;
+              suppressSwitchUntilRef.current = Date.now() + 5000;
+            }}
+          />
+        </div>
           )}
         <div className="card">
           <div className="mb-4">
@@ -629,7 +635,9 @@ export default function JobTest() {
               onClick={submit}
               disabled={
                 submitting ||
-                (resumeCheck && (!resumeCheck.skillsOk || !resumeCheck.expOk))
+                (resumeCheck &&
+                  resumeCheck.ok === true &&
+                  (!resumeCheck.skillsOk || !resumeCheck.expOk))
               }
             >
               {submitting ? "Submitting..." : "Submit"}
