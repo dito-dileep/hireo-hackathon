@@ -105,7 +105,11 @@ export async function POST(req: Request) {
     const res = NextResponse.json({
       ok: true,
       token,
-      user: { id: user.id, username: user.username, role: user.role },
+      user: {
+        id: user?.id || `user-${Date.now()}`,
+        username: user?.username || username,
+        role: user?.role || "candidate",
+      },
     });
     // set HttpOnly cookie for session (demo)
     res.cookies.set("token", token, {
