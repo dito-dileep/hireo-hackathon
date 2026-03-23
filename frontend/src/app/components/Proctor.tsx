@@ -30,7 +30,12 @@ function ProctorInner({
         });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+          try {
+            await videoRef.current.play();
+          } catch (err) {
+            // Browser can interrupt play() during reloads or permission transitions.
+            console.warn("camera preview play interrupted", err);
+          }
         }
         setStreamActive(true);
         setStatus("recording");

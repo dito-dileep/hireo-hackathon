@@ -485,11 +485,6 @@ export default function JobTest() {
     setAiError(null);
     aiSeedRef.current = "";
     setAiAttempts((c) => c + 1);
-    if (j.ok && (!j.skillsOk || !j.expOk)) {
-      alert(
-        "Resume does not meet minimum requirements. Check the detected skills/experience.",
-      );
-    }
     setUploading(false);
   }
 
@@ -752,6 +747,18 @@ export default function JobTest() {
                   : "Check failed"}
               </div>
             )}
+            {resumeCheck &&
+              resumeCheck.ok &&
+              (!resumeCheck.skillsOk || !resumeCheck.expOk) && (
+                <div
+                  className="small"
+                  style={{ color: "#f59e0b", marginTop: 8 }}
+                >
+                  Resume match warning: the parser could not fully confirm the
+                  minimum required skills or experience from the uploaded
+                  text. AI questions can still be generated.
+                </div>
+              )}
           </div>
         </div>
         <div className="card test-card">
@@ -820,7 +827,7 @@ export default function JobTest() {
               )}
             </div>
           ))}
-          {aiQuestions.length === 0 && !aiLoading && (
+          {aiQuestions.length === 0 && !aiLoading && !aiError && (
             <div className="question-card">
               <div className="font-medium">Upload your resume to start</div>
               <div className="small muted" style={{ marginTop: 6 }}>

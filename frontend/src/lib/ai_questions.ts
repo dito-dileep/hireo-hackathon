@@ -5,6 +5,90 @@ export type AiQuestion = {
   expected: string;
 };
 
+function normalizeText(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ");
+}
+
+function pickResumeSkills(resumeText: string, requiredSkills: string[]) {
+  const norm = normalizeText(resumeText);
+  const required = requiredSkills
+    .map((s) => String(s).trim())
+    .filter(Boolean);
+  const matched = required.filter((skill) => {
+    const token = normalizeText(skill).trim();
+    return token && norm.includes(token);
+  });
+  if (matched.length > 0) return matched.slice(0, 3);
+
+  const commonSkills = [
+    "python",
+    "java",
+    "javascript",
+    "typescript",
+    "react",
+    "nextjs",
+    "node",
+    "sql",
+    "mongodb",
+    "html",
+    "css",
+    "c",
+    "c++",
+  ];
+  return commonSkills.filter((skill) => norm.includes(normalizeText(skill))).slice(0, 3);
+}
+
+function buildFallbackQuestions(input: {
+  resumeText: string;
+  requiredSkills: string[];
+  roleTitle?: string;
+  count?: number;
+}): AiQuestion[] {
+  const skills = pickResumeSkills(input.resumeText, input.requiredSkills);
+  const role = input.roleTitle || "the role";
+  const desiredCount = Math.max(1, Math.min(input.count || 3, 5));
+  const questions: AiQuestion[] = [];
+
+  skills.forEach((skill, idx) => {
+    questions.push({
+      id: `fallback-skill-${idx + 1}`,
+      prompt: `Explain how you would use ${skill} in ${role}. Mention one practical scenario and one challenge.`,
+      type: "text",
+      expected: `A strong answer should clearly explain ${skill}, relate it to ${role}, include a practical use case, and mention at least one realistic challenge or tradeoff.`,
+    });
+  });
+
+  if (questions.length < desiredCount) {
+    questions.push({
+      id: "fallback-project-1",
+      prompt: `Describe one project from your resume that best matches ${role}. What was your contribution, tech stack, and measurable outcome?`,
+      type: "text",
+      expected: "A strong answer should describe a relevant project, the candidate's concrete contribution, technologies used, and a measurable outcome or impact.",
+    });
+  }
+
+  if (questions.length < desiredCount) {
+    questions.push({
+      id: "fallback-debug-1",
+      prompt: `You are given a bug in ${role}. Walk through your debugging process step by step.`,
+      type: "text",
+      expected: "A strong answer should cover reproducing the issue, isolating the cause, checking logs or data, applying a fix, testing the fix, and verifying no regressions.",
+    });
+  }
+
+  if (questions.length < desiredCount) {
+    const skill = skills[0] || input.requiredSkills[0] || "programming";
+    questions.push({
+      id: "fallback-code-1",
+      prompt: `Write a short ${skill}-related solution or pseudocode relevant to ${role}. Keep it simple but correct.`,
+      type: "code",
+      expected: `A strong answer should show correct logic, readable structure, and basic relevance to ${skill} and ${role}.`,
+    });
+  }
+
+  return questions.slice(0, desiredCount);
+}
+
 export async function generateAiQuestions(input: {
   resumeText: string;
   requiredSkills: string[];
@@ -12,7 +96,7 @@ export async function generateAiQuestions(input: {
   count?: number;
 }): Promise<AiQuestion[] | null> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) return buildFallbackQuestions(input);
 
   const payload = {
     model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
@@ -79,7 +163,7 @@ export async function generateAiQuestions(input: {
     } catch {
       console.error("AI question API error:", res.status);
     }
-    return null;
+    return buildFallbackQuestions(input);
   }
   const data = await res.json();
   const rawContent = data?.choices?.[0]?.message?.content;
@@ -93,7 +177,7 @@ export async function generateAiQuestions(input: {
             )
             .join("")
         : data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-  if (!text) return null;
+  if (!text) return buildFallbackQuestions(input);
 
   try {
     const cleaned = String(text)
@@ -102,10 +186,10 @@ export async function generateAiQuestions(input: {
       .replace(/\s*```$/i, "")
       .trim();
     const parsed = JSON.parse(cleaned);
-    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed || typeof parsed !== "object") return buildFallbackQuestions(input);
     const questions = parsed.questions as AiQuestion[];
-    if (!Array.isArray(questions)) return null;
-    return questions.filter(
+    if (!Array.isArray(questions)) return buildFallbackQuestions(input);
+    const filtered = questions.filter(
       (q) =>
         q &&
         typeof q.id === "string" &&
@@ -113,8 +197,9 @@ export async function generateAiQuestions(input: {
         typeof q.expected === "string" &&
         (q.type === "short" || q.type === "text" || q.type === "code"),
     );
+    return filtered.length > 0 ? filtered : buildFallbackQuestions(input);
   } catch (err) {
     console.error("AI question parse error:", err, text);
-    return null;
+    return buildFallbackQuestions(input);
   }
 }
