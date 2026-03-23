@@ -66,12 +66,61 @@ function questions() {
   ];
 }
 
+function buildLocalFallbackQuestions(input: {
+  resumeText: string;
+  requiredSkills: string[];
+  roleTitle?: string;
+}) {
+  const roleTitle = input.roleTitle || "this role";
+  const normalizedText = normalizeText(input.resumeText || "");
+  const matchedSkills = (input.requiredSkills || [])
+    .map((skill) => String(skill).trim())
+    .filter(Boolean)
+    .filter((skill) => {
+      const normalizedSkill = normalizeText(skill);
+      return (
+        normalizedText.includes(normalizedSkill) ||
+        skillMatches(input.resumeText || "", skill)
+      );
+    });
+  const chosenSkills = (matchedSkills.length
+    ? matchedSkills
+    : input.requiredSkills
+  ).slice(0, 2);
+
+  const questions = chosenSkills.map((skill, idx) => ({
+    id: `local-skill-${idx + 1}`,
+    prompt: `Explain how you would apply ${skill} in ${roleTitle}. Mention one practical use case and one challenge you would watch for.`,
+    type: "text" as const,
+    expected: `A strong answer should explain ${skill}, connect it to ${roleTitle}, and mention one realistic use case plus one challenge or tradeoff.`,
+  }));
+
+  questions.push({
+    id: "local-project",
+    prompt: `Describe one project or experience from your background that best matches ${roleTitle}. What did you build, what was your contribution, and what outcome did it create?`,
+    type: "text" as const,
+    expected:
+      "A strong answer should include a relevant project, the candidate's direct contribution, the stack or tools used, and a concrete result or impact.",
+  });
+
+  while (questions.length < 3) {
+    questions.push({
+      id: `local-process-${questions.length + 1}`,
+      prompt: `Walk through how you would solve a real problem in ${roleTitle} from first analysis to final validation.`,
+      type: "text" as const,
+      expected:
+        "A strong answer should show a clear step-by-step process, practical reasoning, validation, and awareness of tradeoffs.",
+    });
+  }
+
+  return questions.slice(0, 3);
+}
+
 export default function JobTest() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const jobId = typeof params?.id === "string" ? params.id : "";
   const [job, setJob] = useState<any>(null);
-  const qs = useMemo(() => questions(), []);
   const [answers, setAnswers] = useState<Record<string, string | number>>({});
   const [codeText, setCodeText] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -111,6 +160,37 @@ export default function JobTest() {
   const [agreeError, setAgreeError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [profile, setProfile] = useState<any>(null);
+  const effectiveResumeText = useMemo(() => {
+    const directResumeText = String(resumeText || "").trim();
+    if (directResumeText) return directResumeText;
+
+    const chunks: string[] = [];
+    if (
+      Array.isArray(resumeCheck?.matchedSkills) &&
+      resumeCheck.matchedSkills.length
+    ) {
+      chunks.push(`Matched skills: ${resumeCheck.matchedSkills.join(", ")}`);
+    }
+    if (Array.isArray(profile?.skills) && profile.skills.length) {
+      chunks.push(`Profile skills: ${profile.skills.join(", ")}`);
+    }
+    if (typeof profile?.experience === "number") {
+      chunks.push(`Experience: ${profile.experience} years`);
+    }
+    if (profile?.bio) {
+      chunks.push(String(profile.bio));
+    }
+    if (profile?.resumeText) {
+      chunks.push(String(profile.resumeText));
+    }
+    if (Array.isArray(job?.skills) && job.skills.length) {
+      chunks.push(`Required skills: ${job.skills.join(", ")}`);
+    }
+    if (job?.title) {
+      chunks.push(`Role: ${job.title}`);
+    }
+    return chunks.join(". ").trim();
+  }, [resumeText, resumeCheck, profile, job]);
 
   const [sessionId] = useState(() => `sess-${jobId}-${Date.now()}`);
 
@@ -206,46 +286,74 @@ export default function JobTest() {
     setResumeCheckSource("profile");
   }, [job, profile, resumeCheckSource]);
 
-  useEffect(() => {
-    if (!job) return;
-    if (!resumeText) return;
-    if (aiQuestions.length > 0 || aiLoading) return;
-    (async () => {
+  const loadAiQuestions = useCallback(
+    async (textOverride?: string) => {
+      if (!job) return;
+      const sourceText = String(textOverride || effectiveResumeText || "").trim();
+      const requiredSkills = Array.isArray(job.skills) ? job.skills : [];
+      const fallbackQuestions = buildLocalFallbackQuestions({
+        resumeText:
+          sourceText || `Required skills: ${requiredSkills.join(", ")}`.trim(),
+        requiredSkills,
+        roleTitle: job.title || "",
+      });
+
+      if (!sourceText && requiredSkills.length === 0) {
+        setAiQuestions(fallbackQuestions);
+        setAiError(
+          "Resume text was not readable, so fallback questions were generated from the role details.",
+        );
+        return;
+      }
+
+      const seed = `${job.id || jobId}:${sourceText.length}:${sourceText.slice(0, 24)}:${sourceText.slice(-24)}`;
+      if (aiSeedRef.current === seed && aiQuestions.length > 0) return;
+
       try {
         setAiLoading(true);
         setAiError(null);
-        const seed = `${resumeText.length}:${resumeText.slice(0, 24)}:${resumeText.slice(-24)}`;
-        if (aiSeedRef.current === seed) {
-          setAiLoading(false);
-          return;
-        }
         aiSeedRef.current = seed;
         const res = await fetch("/api/ai/questions", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            resumeText,
-            requiredSkills: job.skills || [],
+            resumeText: sourceText,
+            requiredSkills,
             roleTitle: job.title || "",
             count: 3,
           }),
         });
         const j = await res.json();
-        if (j.ok && Array.isArray(j.questions)) {
+        if (j.ok && Array.isArray(j.questions) && j.questions.length > 0) {
           setAiQuestions(j.questions);
-        } else {
-          setAiError(
-            j?.error ||
-              "AI question generation failed. Please try again.",
-          );
+          return;
         }
+        setAiQuestions(fallbackQuestions);
+        setAiError(
+          j?.error ||
+            "AI questions could not be generated, so fallback questions were prepared from the resume and job skills.",
+        );
       } catch (err) {
         console.error("AI question generation failed on page:", err);
-        setAiError("AI question generation failed. Please try again.");
+        setAiQuestions(fallbackQuestions);
+        setAiError(
+          "AI questions could not be generated, so fallback questions were prepared from the resume and job skills.",
+        );
+      } finally {
+        setAiLoading(false);
       }
-      setAiLoading(false);
-    })();
-  }, [job, resumeText, aiQuestions.length, aiLoading, aiAttempts]);
+    },
+    [aiQuestions.length, effectiveResumeText, job, jobId],
+  );
+
+  useEffect(() => {
+    if (!job) return;
+    if (aiQuestions.length > 0 || aiLoading) return;
+    if (!effectiveResumeText && !(Array.isArray(job.skills) && job.skills.length)) {
+      return;
+    }
+    void loadAiQuestions();
+  }, [job, effectiveResumeText, aiQuestions.length, aiLoading, aiAttempts, loadAiQuestions]);
 
   async function regenerateAiQuestions() {
     setAiQuestions([]);
@@ -465,27 +573,51 @@ export default function JobTest() {
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
     setUploading(true);
-    const res = await fetch("/api/jobs/uploadResume", {
-      method: "POST",
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: fd,
-    });
-    const j = await res.json();
-    setResumeCheck(j);
-    setResumeCheckSource("upload");
-    if (j && j.resumeText) {
-      setResumeText(String(j.resumeText));
-    } else if (j && Array.isArray(j.matchedSkills)) {
-      setResumeText(`Skills: ${j.matchedSkills.join(", ")}`);
+    try {
+      const res = await fetch("/api/jobs/uploadResume", {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: fd,
+      });
+      const j = await res.json();
+      setResumeCheck(j);
+      setResumeCheckSource("upload");
+      const synthesizedResumeText =
+        String(j?.resumeText || "").trim() ||
+        (Array.isArray(j?.matchedSkills) && j.matchedSkills.length
+          ? `Uploaded resume: ${(fileToUse as any).name || "resume"}. Matched skills: ${j.matchedSkills.join(", ")}. Required skills: ${Array.isArray(job?.skills) ? job.skills.join(", ") : ""}`
+          : `Uploaded resume: ${(fileToUse as any).name || "resume"}. Required skills: ${Array.isArray(job?.skills) ? job.skills.join(", ") : ""}`);
+      setResumeText(synthesizedResumeText);
+      setAiQuestions([]);
+      setAiError(null);
+      aiSeedRef.current = "";
+      setAiAttempts((c) => c + 1);
+      await loadAiQuestions(synthesizedResumeText);
+    } catch (err) {
+      console.error("Resume upload/check failed:", err);
+      const fallbackResumeText = `Uploaded resume: ${(fileToUse as any).name || "resume"}. Required skills: ${Array.isArray(job?.skills) ? job.skills.join(", ") : ""}`;
+      setResumeCheck({
+        ok: false,
+        matchedSkills: [],
+        requiredSkills: Array.isArray(job?.skills) ? job.skills : [],
+        detectedExp: 0,
+        skillsOk: false,
+        expOk: false,
+      });
+      setResumeCheckSource("upload");
+      setResumeText(fallbackResumeText);
+      setAiQuestions([]);
+      setAiError(
+        "Resume parsing was unavailable, so fallback questions were generated from the role details.",
+      );
+      aiSeedRef.current = "";
+      setAiAttempts((c) => c + 1);
+      await loadAiQuestions(fallbackResumeText);
+    } finally {
+      setUploading(false);
     }
-    // Force AI regeneration even if the resume text is unchanged.
-    setAiQuestions([]);
-    setAiError(null);
-    aiSeedRef.current = "";
-    setAiAttempts((c) => c + 1);
-    setUploading(false);
   }
 
   return (
