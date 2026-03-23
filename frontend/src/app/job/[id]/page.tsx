@@ -239,7 +239,10 @@ export default function JobTest() {
               "AI question generation failed. Please try again.",
           );
         }
-      } catch {}
+      } catch (err) {
+        console.error("AI question generation failed on page:", err);
+        setAiError("AI question generation failed. Please try again.");
+      }
       setAiLoading(false);
     })();
   }, [job, resumeText, aiQuestions.length, aiLoading, aiAttempts]);

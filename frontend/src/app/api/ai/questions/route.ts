@@ -41,6 +41,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, questions });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ ok: false }, { status: 500 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "AI question generation failed unexpectedly.",
+      },
+      { status: 500 },
+    );
   }
 }

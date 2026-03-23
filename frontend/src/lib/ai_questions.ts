@@ -72,20 +72,49 @@ export async function generateAiQuestions(input: {
     body: JSON.stringify(payload),
   });
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    try {
+      const errText = await res.text();
+      console.error("AI question API error:", res.status, errText);
+    } catch {
+      console.error("AI question API error:", res.status);
+    }
+    return null;
+  }
   const data = await res.json();
+  const rawContent = data?.choices?.[0]?.message?.content;
   const text =
-    data?.choices?.[0]?.message?.content ||
-    data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    typeof rawContent === "string"
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent
+            .map((part: any) =>
+              typeof part === "string" ? part : (part?.text ?? ""),
+            )
+            .join("")
+        : data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
   if (!text) return null;
 
   try {
-    const parsed = JSON.parse(text);
+    const cleaned = String(text)
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+    const parsed = JSON.parse(cleaned);
     if (!parsed || typeof parsed !== "object") return null;
     const questions = parsed.questions as AiQuestion[];
     if (!Array.isArray(questions)) return null;
-    return questions;
-  } catch {
+    return questions.filter(
+      (q) =>
+        q &&
+        typeof q.id === "string" &&
+        typeof q.prompt === "string" &&
+        typeof q.expected === "string" &&
+        (q.type === "short" || q.type === "text" || q.type === "code"),
+    );
+  } catch (err) {
+    console.error("AI question parse error:", err, text);
     return null;
   }
 }
