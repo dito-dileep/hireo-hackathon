@@ -1,18 +1,20 @@
 # HIREO — AI-Assisted Proctored Hiring Platform
 
-HIREO is a hackathon-ready hiring platform that combines proctored assessments, AI-assisted scoring, and recruiter-friendly reporting. It helps recruiters post roles, run structured tests, verify integrity signals, and review candidate performance with minimal friction.
+HIREO is a project for AI subject and  hackathon-ready hiring platform that combines proctored assessments, AI-assisted scoring, and recruiter-friendly reporting. It helps recruiters post roles, run structured tests, verify integrity signals, and review candidate performance with minimal friction.
 
 ## Team Credits
 
 - Dito Dileep — RA2411026010050
 - Adithya R Nath — RA2411026010003
 - Shashwat — RA2511026010402
+- Shreya Medimi -RA2411026010037
 
 ## Member Contributions
 
 - **Dito Dileep** — Lead developer; full‑stack integration, AI grading/resume matching, proctoring logic.
 - **Adithya R Nath** — UI/UX support, testing flows, feature validation, hackathon documentation support.
 - **Shashwat** — Research, feature brainstorming, testing feedback, presentation support, recruiter/candidate flows, deployment setup..
+- **Shreya Medimi -  feature brainstorming, testing feedback,testing flows, feature validation
 
 ## Problem We Solve
 
@@ -113,3 +115,4 @@ Update frontend API base URL if you deploy the backend.
 ## Credits & Acknowledgements
 
 Built for SRM Innovation Hackathon (Edition 1).
+Built and enhanced for AI subject faculty 
