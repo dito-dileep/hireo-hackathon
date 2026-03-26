@@ -34,6 +34,8 @@ Recruiters often struggle to validate candidate performance in remote assessment
 - Integrity monitoring with proctor timeline and flags
 - PDF reports for recruiters
 - reCAPTCHA on auth screens
+- AI generated automated question according to skill matched in resume
+- recruiter can shortlist multiple resume by the skills they need and show in order
 
 ## Project Structure
 
